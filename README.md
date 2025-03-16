@@ -1,5 +1,7 @@
 Case study: How does a bike-share navigate speedy success?
 
+[Cyclistic Analysis Proposal.docx](https://github.com/user-attachments/files/19274080/Cyclistic.Analysis.Proposal.docx)
+
 
 ![image](https://github.com/user-attachments/assets/91f104bb-0f9f-4b6e-84b3-673567d46cdf)
 
@@ -44,4 +46,3 @@ You will produce a report with the following deliverables:
 5.	Supporting visualizations and key findings
 6.	Your top three recommendations based on your analysis
 
-[Cyclistic Analysis Proposal.docx](https://github.com/user-attachments/files/19274080/Cyclistic.Analysis.Proposal.docx)
