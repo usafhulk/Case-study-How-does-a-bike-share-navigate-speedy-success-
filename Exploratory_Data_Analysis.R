@@ -1,0 +1,398 @@
+#package to handle this large csv file
+
+install.packages("data.table")
+library(data.table)
+
+# reading in all the csv files for the previous 12 months of data
+
+Divvy_24_Feb <- fread("202402-divvy-tripdata.csv")
+Divvy_24_Mar <- fread("202403-divvy-tripdata.csv")
+Divvy_24_Apr <- fread("202404-divvy-tripdata.csv")
+Divvy_24_May <- fread("202405-divvy-tripdata.csv")
+Divvy_24_Jun <- fread("202406-divvy-tripdata.csv")
+Divvy_24_Jul <- fread("202407-divvy-tripdata.csv")
+Divvy_24_Aug <- fread("202408-divvy-tripdata.csv")
+Divvy_24_Sep <- fread("202409-divvy-tripdata.csv")
+Divvy_24_Oct <- fread("202410-divvy-tripdata.csv")
+Divvy_24_Nov <- fread("202411-divvy-tripdata.csv")
+Divvy_24_Dec <- fread("202412-divvy-tripdata.csv")
+Divvy_25_Jan <- fread("202501-divvy-tripdata.csv")
+Divvy_25_Feb <- fread("202502-divvy-tripdata.csv")
+
+
+# efficient loop that verifies the colnames of each data.table without typing out each individual name.
+
+months <- c("Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+years <- c(rep(24, 11), 25, 25) # 24 for Feb-Dec, 25 for Jan-Feb
+
+for (i in 1:length(months)) {
+  df_name <- paste0("Divvy_", years[i], "_", months[i])
+  if (exists(df_name)) { # Check if the data frame exists
+    print(colnames(get(df_name)))
+  } else {
+    print(paste("Data frame", df_name, "does not exist."))
+  }
+}
+
+# combining all the dataframes into one dataframe
+
+Divvy_24_25 <- rbind(Divvy_24_Feb, Divvy_24_Mar, Divvy_24_Apr, Divvy_24_May, Divvy_24_Jun, Divvy_24_Jul, Divvy_24_Aug, Divvy_24_Sep, Divvy_24_Oct, Divvy_24_Nov, Divvy_24_Dec, Divvy_25_Jan, Divvy_25_Feb)
+
+# inspecting the data
+
+head(Divvy_24_25)
+str(Divvy_24_25)
+summary(Divvy_24_25)
+missing_coords <- which(is.na(Divvy_24_25$end_lat))
+summary(missing_coords)
+
+# Create a smaller subset (e.g., 10,000 rows)
+
+subset_size <- 10000
+subset_dt <- Divvy_24_25[1:subset_size]
+
+# This data.table is large, so i am using a subset join method for this process. I am looking to fix the NA values in the end_lat and end_lng columns. To do this, I am searching for the first non-NA value in the end_lat and end_lng columns for each end_station_name. This allows me to find the correct end_lat and end_lng values for the missing rows and complete the data.table. Running this as a loop would take far too much memory and computation time, this is why i went with the join method. 
+# Measure start time
+
+start_time <- Sys.time()
+
+# Create valid coordinates data.table (using the full data.table)
+
+valid_coords <- Divvy_24_25[!is.na(end_lat), .(end_lat = end_lat[1], end_lng = end_lng[1]), by = end_station_name]
+
+# Update the main data.table using a join (using the full data.table)
+
+Divvy_24_25[is.na(end_lat), `:=`(end_lat = valid_coords[.SD, end_lat, on = "end_station_name"],
+                                 end_lng = valid_coords[.SD, end_lng, on = "end_station_name"])]
+
+# Measure end time
+
+end_time <- Sys.time()
+
+# Calculate elapsed time
+
+elapsed_time <- end_time - start_time
+
+# Print elapsed time
+
+print(paste("Elapsed time:", elapsed_time))
+
+# Verify the changes
+
+summary(Divvy_24_25)
+
+# 1. Identify rows with missing end coordinates
+
+missing_coords <- which(is.na(Divvy_24_25$end_lat))
+summary(missing_coords)
+
+
+# Check for missing values
+
+missing_values <- colSums(is.na(Divvy_24_25))
+print(missing_values)
+
+# Check for duplicated rows
+
+duplicated_rows <- sum(duplicated(Divvy_24_25))
+print(duplicated_rows)
+
+# Write to a new CSV file using fwrite to efficiently handle large data in the data.table
+
+#fwrite(Divvy_24_25, "Divvy_24_25.csv")
+
+summary(Divvy_24_25)
+tail(Divvy_24_25, 20)
+
+# Calculate trip duration in minutes
+
+Divvy_24_25[, trip_duration := as.numeric(difftime(ended_at, started_at, units = "mins"))]
+
+# Visualize the distribution of trip duration for members and casual riders
+
+library(ggplot2)
+
+# Visualize the usage patterns over time
+
+ggplot(Divvy_24_25, aes(x = started_at, fill = member_casual)) +
+  geom_histogram(binwidth = 3600, position = "dodge") +
+  labs(title = "Usage Patterns Over Time", x = "Start Time", y = "Count") +
+  theme_minimal()
+
+# Calculate the number of trips per user type
+
+trip_counts <- Divvy_24_25[, .N, by = .(member_casual)]
+print(trip_counts)
+
+# Calculate average trip duration per user type
+
+avg_trip_duration <- Divvy_24_25[, .(avg_duration = mean(trip_duration, na.rm = TRUE)), by = .(member_casual)]
+print(avg_trip_duration)
+
+# Identify peak usage times
+
+Divvy_24_25[, hour_of_day := hour(started_at)]
+peak_usage <- Divvy_24_25[, .N, by = .(member_casual, hour_of_day)]
+print(peak_usage)
+
+# Visualize trip counts by user type
+
+ggplot(trip_counts, aes(x = member_casual, y = N, fill = member_casual)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Trip Counts by User Type", x = "User Type", y = "Count") +
+  theme_minimal()
+
+# Visualize average trip duration by user type
+
+ggplot(avg_trip_duration, aes(x = member_casual, y = avg_duration, fill = member_casual)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Trip Duration by User Type", x = "User Type", y = "Average Trip Duration (minutes)") +
+  theme_minimal()
+
+# Visualize peak usage times
+
+ggplot(peak_usage, aes(x = hour_of_day, y = N, color = member_casual, group = member_casual)) +
+  geom_line() +
+  labs(title = "Peak Usage Times by User Type", x = "Hour of Day", y = "Count") +
+  theme_minimal()
+
+# Perform a t-test to compare trip durations between members and casual riders
+
+t_test_result <- t.test(trip_duration ~ member_casual, data = Divvy_24_25)
+print(t_test_result)
+
+# Function to calculate distance using the Haversine formula
+
+haversine <- function(lat1, lon1, lat2, lon2) {
+  R <- 3959 # Earth radius in miles
+  delta_lat <- (lat2 - lat1) * pi / 180
+  delta_lon <- (lon2 - lon1) * pi / 180
+  a <- sin(delta_lat / 2) * sin(delta_lat / 2) +
+    cos(lat1 * pi / 180) * cos(lat2 * pi / 180) *
+    sin(delta_lon / 2) * sin(delta_lon / 2)
+  c <- 2 * atan2(sqrt(a), sqrt(1 - a))
+  R * c
+}
+
+# Calculate distance for each trip
+
+Divvy_24_25[, distance := haversine(start_lat, start_lng, end_lat, end_lng)]
+
+# Aggregate the data by binning trip duration and distance
+
+library(dplyr)
+binned_data <- Divvy_24_25 %>%
+  mutate(
+    trip_duration_bin = cut(trip_duration, breaks = seq(0, max(trip_duration), by = 5)),
+    distance_bin = cut(distance, breaks = seq(0, max(distance), by = 0.5))
+  ) %>%
+  group_by(member_casual, trip_duration_bin, distance_bin) %>%
+  summarise(
+    avg_trip_duration = mean(trip_duration, na.rm = TRUE),
+    avg_distance = mean(distance, na.rm = TRUE),
+    count = n()
+  ) %>%
+  ungroup()
+
+# Calculate the 10th and 90th percentiles for trip duration and distance
+trip_duration_cutoffs <- quantile(Divvy_24_25$trip_duration, probs = c(0.1, 0.9), na.rm = TRUE)
+distance_cutoffs <- quantile(Divvy_24_25$distance, probs = c(0.1, 0.9), na.rm = TRUE)
+
+# Filter the data to remove the top and bottom 10%
+filtered_data <- Divvy_24_25 %>%
+  filter(trip_duration >= trip_duration_cutoffs[1], trip_duration <= trip_duration_cutoffs[2],
+         distance >= distance_cutoffs[1], distance <= distance_cutoffs[2])
+
+# Sample 10% of the filtered data
+set.seed(123) # for reproducibility
+sampled_data <- filtered_data %>% sample_frac(0.1)
+
+# Create a box plot to visualize the distribution of trip durations by user type
+
+ggplot(sampled_data, aes(x = member_casual, y = trip_duration, fill = member_casual)) +
+  geom_boxplot() +
+  labs(
+    title = "Distribution of Trip Durations by User Type",
+    x = "User Type",
+    y = "Trip Duration (minutes)",
+    fill = "User Type"
+  ) +
+  scale_fill_manual(values = c("member" = "blue", "casual" = "red")) +
+  theme_minimal()
+
+# Create a histogram to show the distribution of trip durations by user type
+
+ggplot(sampled_data, aes(x = trip_duration, fill = member_casual)) +
+  geom_histogram(binwidth = 5, position = "dodge") +
+  labs(
+    title = "Distribution of Trip Durations by User Type",
+    x = "Trip Duration (minutes)",
+    y = "Count",
+    fill = "User Type"
+  ) +
+  scale_fill_manual(values = c("member" = "blue", "casual" = "red")) +
+  theme_minimal()
+
+# Create a density plot to show the distribution of trip durations by user type
+
+ggplot(sampled_data, aes(x = trip_duration, fill = member_casual)) +
+  geom_density(alpha = 0.5) +
+  labs(
+    title = "Density of Trip Durations by User Type",
+    x = "Trip Duration (minutes)",
+    y = "Density",
+    fill = "User Type"
+  ) +
+  scale_fill_manual(values = c("member" = "blue", "casual" = "red")) +
+  theme_minimal()
+
+# Analyze start station usage
+
+start_station_usage <- Divvy_24_25[, .N, by = .(member_casual, start_station_name)]
+
+# Find the top 10 start stations for each user type
+
+top_start_stations <- start_station_usage[ , head(.SD, 10), by = member_casual][order(-N), ]
+
+print("Top 10 Start Stations by User Type:")
+
+print(top_start_stations)
+
+# Visualize top start stations 
+
+library(ggplot2)
+
+ggplot(top_start_stations, aes(x = start_station_name, y = N, fill = member_casual)) +
+  
+  geom_bar(stat = "identity", position = "dodge") +
+  
+  labs(title = "Top 10 Start Stations by User Type",
+       
+       x = "Start Station",
+       
+       y = "Number of Trips") +
+  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate labels
+
+# Analyze end station usage (similar to start station analysis)
+
+end_station_usage <- Divvy_24_25[, .N, by = .(member_casual, end_station_name)]
+
+# Find the top 10 end stations for each user type
+
+top_end_stations <- end_station_usage[ , head(.SD, 10), by = member_casual][order(-N), ]
+
+print("Top 10 End Stations by User Type:")
+
+print(top_end_stations)
+
+# Visualize top end stations (example)
+
+ggplot(top_end_stations, aes(x = end_station_name, y = N, fill = member_casual)) +
+  
+  geom_bar(stat = "identity", position = "dodge") +
+  
+  labs(title = "Top 10 End Stations by User Type",
+       
+       x = "End Station",
+       
+       y = "Number of Trips") +
+  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+library(lubridate) # Make sure lubridate is loaded
+
+# Add a column to indicate the day of the week
+
+Divvy_24_25[, day_of_week := wday(started_at, abbr = TRUE)] # Use abbr instead of label
+
+# Analyze trip counts by day of week and user type
+
+usage_by_day <- Divvy_24_25[, .N, by = .(member_casual, day_of_week)]
+
+print("Usage by Day of Week:")
+
+print(usage_by_day)
+
+# Visualize usage by day of week 
+
+
+ggplot(usage_by_day, aes(x = day_of_week, y = N, fill = member_casual)) +
+  
+  geom_bar(stat = "identity", position = "dodge") +
+  
+  labs(title = "Usage by Day of Week",
+       
+       x = "Day of Week",
+       
+       y = "Number of Trips") +
+  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+library(lubridate) 
+
+# Add a column to indicate the day of the week
+
+Divvy_24_25[, day_of_week := wday(started_at, abbr = TRUE)] # Use abbr instead of label
+
+# Analyze trip counts by day of week and user type
+
+usage_by_day <- Divvy_24_25[, .N, by = .(member_casual, day_of_week)]
+
+print("Usage by Day of Week:")
+
+print(usage_by_day)
+
+# Visualize usage by day of week (example)
+
+ggplot(usage_by_day, aes(x = day_of_week, y = N, fill = member_casual)) +
+  
+  geom_bar(stat = "identity", position = "dodge") +
+  
+  labs(title = "Usage by Day of Week",
+       
+       x = "Day of Week",
+       
+       y = "Number of Trips") +
+  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Add a column to indicate the month
+
+Divvy_24_25[, month := month(started_at, abbr = TRUE)] # Use abbr instead of label
+
+# Analyze trip counts by month and user type
+
+usage_by_month <- Divvy_24_25[, .N, by = .(member_casual, month)]
+
+print("Usage by Month:")
+
+print(usage_by_month)
+
+# Visualize usage by month (example)
+
+ggplot(usage_by_month, aes(x = month, y = N, fill = member_casual)) +
+  
+  geom_bar(stat = "identity", position = "dodge") +
+  
+  labs(title = "Usage by Month",
+       
+       x = "Month",
+       
+       y = "Number of Trips") +
+  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
