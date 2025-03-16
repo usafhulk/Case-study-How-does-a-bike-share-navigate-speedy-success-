@@ -43,3 +43,5 @@ You will produce a report with the following deliverables:
 4.	A summary of your analysis
 5.	Supporting visualizations and key findings
 6.	Your top three recommendations based on your analysis
+
+[Cyclistic Analysis Proposal.docx](https://github.com/user-attachments/files/19274080/Cyclistic.Analysis.Proposal.docx)
